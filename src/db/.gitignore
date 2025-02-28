@@ -1,0 +1,8 @@
+# session jangan di masukin lah babi
+sessions
+sessions/*
+
+
+# jsonDb jangan di masukin lah babi
+!jsonDb/db1/botinfo.json
+jsonDb/db2
