@@ -8,28 +8,7 @@ import { handleCommand } from './src/helpers/command.handler';
 
 const app = express();
 app.use(express.json());
-
-// Endpoint untuk registrasi menggunakan DB (session file)
-app.post('/register', async (req, res) => {
-    const { username, password, phoneNumber } = req.body;
-    
-    // Cek apakah user sudah terdaftar dengan mencoba memuat session berdasarkan username
-    const existing = await loadSession(username);
-    if (existing) {
-        return res.status(400).json({ error: 'Username sudah terdaftar' });
-    }
-
-    const userData = {
-        password,
-        phoneNumber,
-        createdAt: new Date()
-    };
-
-    // Simpan data user ke dalam session file
-    await saveSession(username, userData);
-
-    res.json({ message: 'Registrasi berhasil' });
-});
+app.use(express.static(path.join(__dirname, 'src/frontends')));
 
 app.listen(config.port, () => {
     console.log(`Server berjalan di port ${config.port}`);
@@ -63,13 +42,17 @@ async function connectToWhatsApp() {
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         
-        // Hanya tanggapi pesan masuk dari orang lain (bukan dari diri sendiri)
         if (!msg.key.fromMe && m.type === 'notify') {
             const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             
-            // Gunakan command handler untuk menangani perintah
             if (messageText.startsWith('!')) {
+                // Handle commands
                 await handleCommand(sock, msg.key.remoteJid!, messageText);
+            } else {
+                // Handle normal chat (optional)
+                await sock.sendMessage(msg.key.remoteJid!, {
+                    text: 'Hai! Saya adalah bot. Ketik !help untuk melihat daftar perintah yang tersedia.'
+                });
             }
         }
     });

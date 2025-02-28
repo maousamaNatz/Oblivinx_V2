@@ -1,4 +1,9 @@
+
+# hapus jing ga penting
 node_modules
+package-lock.json
+
+# Environment Variables (ga penting)
 .env
 .env.local
 .env.development.local
