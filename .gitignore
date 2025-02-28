@@ -1,4 +1,3 @@
-
 # hapus jing ga penting
 node_modules
 package-lock.json
@@ -9,4 +8,5 @@ package-lock.json
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*.local
 

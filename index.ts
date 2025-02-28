@@ -1,62 +1,129 @@
-import express from 'express';
-import config from './src/config/config';
-import { makeWASocket, DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import {
+  default as makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  WASocket,
+  AuthenticationState,
+  BaileysEventMap,
+  ConnectionState,
+  Browsers
+} from "@whiskeysockets/baileys";
 import { Boom } from '@hapi/boom';
-import { saveSession, loadSession } from './src/db/database';
-import path from 'path';
-import { handleCommand } from './src/helpers/command.handler';
+import { logger } from "./src/utilities/logger.utils";
+import config from "./src/config/config";
+import { initMessageHandler } from "./src/handler/message.handler";
+import { permissionHandler } from "./src/handler/permission.handler";
+import dotenv from "dotenv";
 
-const app = express();
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'src/frontends')));
+// Load environment variables
+dotenv.config();
 
-app.listen(config.port, () => {
-    console.log(`Server berjalan di port ${config.port}`);
-});
+class WhatsAppBot {
+  private socket: WASocket | null = null;
+  private isReconnecting: boolean = false;
+  private reconnectAttempts: number = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS: number = 5;
+  private readonly RECONNECT_INTERVAL: number = 5000;
 
-async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  constructor() {
+    this.initialize();
+  }
 
-    const sock = makeWASocket({
-        auth: state,
+  private async initialize() {
+    try {
+      if (this.socket?.user) {
+        logger.info("Session utama sudah aktif");
+        return;
+      }
+
+      const { state, saveCreds } = await useMultiFileAuthState(config.session.path);
+      
+      this.socket = makeWASocket({
         printQRInTerminal: true,
-        defaultQueryTimeoutMs: 60000
-    });
+        auth: state,
+        browser: ["Oblivinx Bot", "Chrome", "1.0.0"],
+        generateHighQualityLinkPreview: true
+      });
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
+      this.setupEventHandlers(saveCreds);
+      initMessageHandler(this.socket);
+      permissionHandler.setup(this.socket);
+
+      logger.info("Bot berhasil diinisialisasi");
+    } catch (error) {
+      logger.error("Gagal menginisialisasi bot:", error);
+      process.exit(1);
+    }
+  }
+
+  private setupEventHandlers(saveCreds: () => Promise<void>) {
+    if (!this.socket) return;
+
+    // Connection update handler
+    this.socket.ev.on("connection.update", async (update: Partial<ConnectionState>) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        logger.info("QR Code baru tersedia untuk scan");
+      }
+
+      if (connection === "close") {
+        const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
         
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            }
+        if (shouldReconnect) {
+          await this.handleReconnect();
+        } else {
+          logger.error("Sesi terputus karena logout");
+          process.exit(1);
         }
-        
-        console.log('Koneksi update:', update);
+      }
+
+      if (connection === "open") {
+        logger.info(`Bot terhubung dengan nomor: ${this.socket?.user?.id}`);
+        this.resetReconnectState();
+      }
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    // Credentials update handler
+    this.socket.ev.on("creds.update", saveCreds);
+  }
 
-    sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        
-        if (!msg.key.fromMe && m.type === 'notify') {
-            const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-            
-            if (messageText.startsWith('!')) {
-                // Handle commands
-                await handleCommand(sock, msg.key.remoteJid!, messageText);
-            } else {
-                // Handle normal chat (optional)
-                await sock.sendMessage(msg.key.remoteJid!, {
-                    text: 'Hai! Saya adalah bot. Ketik !help untuk melihat daftar perintah yang tersedia.'
-                });
-            }
-        }
-    });
+  private async handleReconnect() {
+    if (this.isReconnecting) return;
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+
+    logger.warn(`Mencoba reconnect... (Percobaan ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS})`);
+
+    if (this.reconnectAttempts > this.MAX_RECONNECT_ATTEMPTS) {
+      logger.error("Batas maksimum reconnect tercapai");
+      process.exit(1);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, this.RECONNECT_INTERVAL));
+
+    try {
+      await this.initialize();
+    } catch (error) {
+      logger.error("Gagal melakukan reconnect:", error);
+      this.isReconnecting = false;
+    }
+  }
+
+  private resetReconnectState() {
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
+  }
 }
 
-// Memulai koneksi WhatsApp
-connectToWhatsApp().catch(err => console.log('Terjadi kesalahan:', err));
+// Handle uncaught exceptions
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled Rejection:", reason);
+});
+
+// Start the bot
+new WhatsAppBot();

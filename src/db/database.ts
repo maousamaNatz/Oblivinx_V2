@@ -1,11 +1,24 @@
 import path from 'path';
 import fs from 'fs';
+import config from '../config/config';
 
 // Buat folder sessions jika belum ada
-const sessionsDir = path.join(__dirname, 'sessions');
+const sessionsDir = path.join(process.cwd(), config.session.path);
 if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
 }
+
+// Tambahkan pembuatan direktori untuk file JSON
+const jsonDbDirs = [
+    'src/db/jsonDb/db1/lowdb',
+    'src/db/jsonDb/db1/users'
+];
+
+jsonDbDirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+});
 
 export async function saveSession(sessionId: string, data: any) {
     const sessionFile = path.join(sessionsDir, `${sessionId}.json`);

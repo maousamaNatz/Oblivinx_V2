@@ -1,0 +1,36 @@
+{
+  "auto_replies": [
+    {
+      "trigger": "halo",
+      "response": "Hai! Ada yang bisa saya bantu?"
+    },
+    {
+      "trigger": "selamat pagi",
+      "response": "Selamat pagi! Semoga hari Anda menyenangkan 😊"
+    },
+    {
+      "trigger": "selamat siang", 
+      "response": "Selamat siang! Ada yang bisa dibantu?"
+    },
+    {
+      "trigger": "selamat sore",
+      "response": "Selamat sore! Semoga hari Anda menyenangkan 🌅"
+    },
+    {
+      "trigger": "selamat malam",
+      "response": "Selamat malam! Selamat beristirahat 🌙"
+    },
+    {
+      "trigger": "terima kasih",
+      "response": "Sama-sama! Senang bisa membantu 🙏"
+    },
+    {
+      "trigger": "siapa kamu",
+      "response": "Saya adalah bot WhatsApp yang siap membantu Anda 🤖"
+    },
+    {
+      "trigger": "menu",
+      "response": "Berikut menu yang tersedia:\n1. !help - Menampilkan bantuan\n2. !info - Informasi bot\n3. !owner - Kontak pemilik bot"
+    }
+  ]
+}

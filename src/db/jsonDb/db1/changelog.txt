@@ -1,0 +1,10 @@
+
+*# V 0.0.1 ~ Obx Bot*
+ - Perubahan
+  - Menambahkan fitur command dasar (!help, !ping, !info)
+  - Menambahkan sistem auto-reply untuk pesan non-command
+  - Implementasi koneksi WhatsApp menggunakan baileys
+  - Menambahkan konfigurasi dasar bot
+  - Menambahkan sistem manajemen sesi
+  - Menambahkan server express untuk keperluan frontend
+ 
