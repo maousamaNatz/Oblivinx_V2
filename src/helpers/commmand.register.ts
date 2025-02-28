@@ -27,27 +27,23 @@ interface CommandMessage {
     text: string;
 }
 
+// Helper untuk membuat command
 export const Oblivinx = {
     cmd: (options: CommandOptions): Command => ({
-        name: options.name,
-        description: options.description,
-        usage: options.usage,
+        ...options,
         aliases: options.aliases || [],
-        category: options.category || 'general',
-        cooldown: options.cooldown ?? 5,
-        run: options.run
+        category: options.category || 'misc',
+        cooldown: options.cooldown || 3
     })
 };
 
-export type CommandType = ReturnType<typeof Oblivinx.cmd>;
-
 class CommandRegistry {
     private static instance: CommandRegistry;
-    public commands = new Map<string, Command>();
-    private cooldowns = new Map<string, Map<string, number>>();
+    public commands: Map<string, Command> = new Map();
+    private cooldowns: Map<string, Map<string, number>> = new Map();
 
     private constructor() {
-        this.loadCommandsFromFolder();
+        this.loadCommands();
     }
 
     public static getInstance(): CommandRegistry {
@@ -57,31 +53,42 @@ class CommandRegistry {
         return CommandRegistry.instance;
     }
 
-    private loadCommandsFromFolder() {
-        const commandsPath = path.join(__dirname, '../command');
-        
-        if (!fs.existsSync(commandsPath)) {
-            fs.mkdirSync(commandsPath, { recursive: true });
-            return;
-        }
+    private async loadCommands() {
+        try {
+            const commandsDir = path.join(__dirname, '../command');
+            const files = fs.readdirSync(commandsDir).filter(file => file.endsWith('.ts') || file.endsWith('.js'));
 
-        fs.readdirSync(commandsPath)
-            .filter(file => ['.ts', '.js'].some(ext => file.endsWith(ext)))
-            .forEach(file => this.loadCommandFile(path.join(commandsPath, file)));
+            for (const file of files) {
+                const filePath = path.join(commandsDir, file);
+                await this.loadCommandFile(filePath);
+            }
+        } catch (error) {
+            console.error('[ERROR] Gagal memuat commands:', error);
+        }
     }
 
-    private loadCommandFile(filePath: string) {
+    private async loadCommandFile(filePath: string) {
         try {
             const commandModule = require(filePath);
-            const cmd = commandModule.default || commandModule;
-            
-            if (!cmd?.name) {
-                console.warn(`[WARN] File ${path.basename(filePath)} tidak memiliki command yang valid`);
-                return;
-            }
+            const commands = commandModule.default || commandModule;
 
-            this.register(cmd);
-            console.log(`[CMD] Berhasil memuat command: !${cmd.name}`);
+            // Handle array of commands
+            if (Array.isArray(commands)) {
+                commands.forEach(cmd => {
+                    if (cmd?.name) {
+                        this.register(cmd);
+                        console.log(`[CMD] Berhasil memuat command: !${cmd.name} dari ${path.basename(filePath)}`);
+                    }
+                });
+            }
+            // Handle single command
+            else if (commands?.name) {
+                this.register(commands);
+                console.log(`[CMD] Berhasil memuat command: !${commands.name} dari ${path.basename(filePath)}`);
+            }
+            else {
+                console.warn(`[WARN] File ${path.basename(filePath)} tidak memiliki command yang valid`);
+            }
         } catch (error) {
             console.error(`[ERROR] Gagal memuat command dari ${path.basename(filePath)}:`, error);
         }
@@ -92,7 +99,7 @@ class CommandRegistry {
         this.commands.set(mainCommand, command);
         
         // Daftarkan semua alias
-        command.aliases.forEach(alias => {
+        command.aliases?.forEach(alias => {
             this.commands.set(`!${alias.toLowerCase()}`, command);
         });
     }
@@ -102,37 +109,52 @@ class CommandRegistry {
         remoteJid: string,
         messageText: string
     ) {
-        const [rawCommandName, ...args] = messageText.slice(1).split(' ');
-        const commandName = rawCommandName.toLowerCase();
-        const command = this.commands.get(`!${commandName}`);
-
-        if (!command) {
-            return sock.sendMessage(remoteJid, {
-                text: '❌ Perintah tidak dikenali. Ketik !help untuk melihat daftar perintah'
-            });
-        }
-
-        // Cek cooldown
-        const now = Date.now();
-        const userCooldowns = this.cooldowns.get(command.name) ?? new Map<string, number>();
-        const lastUsed = userCooldowns.get(remoteJid) ?? 0;
-        const cooldownTime = lastUsed + (command.cooldown * 1000);
-
-        if (now < cooldownTime) {
-            const remaining = Math.ceil((cooldownTime - now) / 1000);
-            return sock.sendMessage(remoteJid, {
-                text: `⏳ Mohon tunggu ${remaining} detik sebelum menggunakan perintah ini lagi`
-            });
-        }
-
         try {
+            const [rawCommandName, ...args] = messageText.slice(1).split(' ');
+            const commandName = rawCommandName.toLowerCase();
+            
+            console.log('[DEBUG] Mencoba menjalankan command:', {
+                commandName,
+                args,
+                availableCommands: Array.from(this.commands.keys())
+            });
+
+            const command = this.commands.get(`!${commandName}`);
+
+            if (!command) {
+                console.log('[DEBUG] Command tidak ditemukan:', commandName);
+                await sock.sendMessage(remoteJid, {
+                    text: '❌ Perintah tidak dikenali. Ketik !help untuk melihat daftar perintah'
+                });
+                return;
+            }
+
+            // Cek cooldown
+            const now = Date.now();
+            const userCooldowns = this.cooldowns.get(command.name) ?? new Map<string, number>();
+            const lastUsed = userCooldowns.get(remoteJid) ?? 0;
+            const cooldownTime = lastUsed + (command.cooldown * 1000);
+
+            if (now < cooldownTime) {
+                const remaining = Math.ceil((cooldownTime - now) / 1000);
+                await sock.sendMessage(remoteJid, {
+                    text: `⏳ Mohon tunggu ${remaining} detik sebelum menggunakan perintah ini lagi`
+                });
+                return;
+            }
+
+            console.log('[DEBUG] Menjalankan command:', command.name);
             await command.run(sock, { remoteJid, text: messageText }, args);
+            
+            // Update cooldown
             userCooldowns.set(remoteJid, now);
             this.cooldowns.set(command.name, userCooldowns);
+            
+            console.log('[DEBUG] Command berhasil dijalankan:', command.name);
         } catch (error) {
             console.error('[ERROR] Gagal menjalankan perintah:', error);
             const errorMessage = error instanceof Error ? error.message : 'Kesalahan internal';
-            sock.sendMessage(remoteJid, {
+            await sock.sendMessage(remoteJid, {
                 text: `❌ Gagal menjalankan perintah: ${errorMessage}`
             });
         }
@@ -140,3 +162,4 @@ class CommandRegistry {
 }
 
 export const commandRegistry = CommandRegistry.getInstance();
+export type CommandType = Command;

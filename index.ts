@@ -13,6 +13,7 @@ import { logger } from "./src/utilities/logger.utils";
 import config from "./src/config/config";
 import { initMessageHandler } from "./src/handler/message.handler";
 import { permissionHandler } from "./src/handler/permission.handler";
+import { commandRegistry } from "./src/helpers/commmand.register";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -45,11 +46,17 @@ class WhatsAppBot {
         generateHighQualityLinkPreview: true
       });
 
+      // Inisialisasi command registry
+      if (commandRegistry.commands.size === 0) {
+        logger.info("Memuat command...");
+      }
+
       this.setupEventHandlers(saveCreds);
       initMessageHandler(this.socket);
       permissionHandler.setup(this.socket);
 
       logger.info("Bot berhasil diinisialisasi");
+      logger.info(`Command yang tersedia: ${Array.from(commandRegistry.commands.keys()).join(", ")}`);
     } catch (error) {
       logger.error("Gagal menginisialisasi bot:", error);
       process.exit(1);

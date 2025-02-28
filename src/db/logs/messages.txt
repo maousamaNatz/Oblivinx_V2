@@ -1,0 +1,6 @@
+[2025-02-28T08:28:32.783Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !test
+[2025-02-28T08:28:39.127Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !help
+[2025-02-28T09:36:09.340Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !help
+[2025-02-28T09:36:17.802Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !test
+[2025-02-28T09:36:22.024Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !ping
+[2025-02-28T09:36:27.378Z] Dari: 6281910058235@s.whatsapp.net - Pesan: !status
