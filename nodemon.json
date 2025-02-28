@@ -7,7 +7,7 @@
   "ignore": [
     "node_modules/*",
     "dist/*",
-    "src/**/*.test.ts",
+    "src/**/*.test.ts", 
     "src/**/*.spec.ts",
     "src/db/logs/*",
     "src/db/sessions/*"
@@ -18,5 +18,8 @@
   "events": {
     "restart": "clear"
   },
-  "verbose": true
+  "verbose": false,
+  "quiet": true,
+  "stdout": false,
+  "stderr": false
 }

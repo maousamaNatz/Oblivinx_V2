@@ -8,7 +8,6 @@ import {
   ConnectionState,
   Browsers
 } from "@whiskeysockets/baileys";
-import { Boom } from '@hapi/boom';
 import { logger } from "./src/utilities/logger.utils";
 import config from "./src/config/config";
 import { initMessageHandler } from "./src/handler/message.handler";
@@ -55,8 +54,7 @@ class WhatsAppBot {
       initMessageHandler(this.socket);
       permissionHandler.setup(this.socket);
 
-      logger.info("Bot berhasil diinisialisasi");
-      logger.info(`Command yang tersedia: ${Array.from(commandRegistry.commands.keys()).join(", ")}`);
+      logger.success("Bot berhasil diinisialisasi");
     } catch (error) {
       logger.error("Gagal menginisialisasi bot:", error);
       process.exit(1);
@@ -86,7 +84,7 @@ class WhatsAppBot {
       }
 
       if (connection === "open") {
-        logger.info(`Bot terhubung dengan nomor: ${this.socket?.user?.id}`);
+        logger.success(`Bot terhubung dengan nomor: ${this.socket?.user?.id}`);
         this.resetReconnectState();
       }
     });

@@ -1,5 +1,6 @@
 import { WASocket } from '@whiskeysockets/baileys';
 import fs from 'fs';
+import { logger } from '../utilities/logger.utils';
 
 // Konfigurasi file permission
 const ADMINS_FILE = 'src/db/jsonDb/db1/lowdb/admins.json';
@@ -25,7 +26,7 @@ class PermissionHandler {
             const ownerData = JSON.parse(fs.readFileSync(OWNER_FILE, 'utf8'));
             this.owner = ownerData.owner;
         } catch (error) {
-            console.error('Gagal memuat data permission:', error);
+            logger.error('Gagal memuat data permission:', error);
             // Inisialisasi default jika file tidak ada
             this.admins = [];
             this.owner = '';
@@ -46,7 +47,7 @@ class PermissionHandler {
             const participant = groupMetadata.participants.find(p => p.id === userId);
             return participant?.admin === 'admin' || participant?.admin === 'superadmin';
         } catch (error) {
-            console.error('Gagal mengecek admin grup:', error);
+            logger.error('Gagal mengecek admin grup:', error);
             return false;
         }
     }
@@ -65,6 +66,7 @@ class PermissionHandler {
         if (!this.admins.includes(userId)) {
             this.admins.push(userId);
             await this.saveAdmins();
+            logger.success(`Admin baru ditambahkan: ${userId}`);
             return true;
         }
         return false;
@@ -80,6 +82,7 @@ class PermissionHandler {
         if (index > -1) {
             this.admins.splice(index, 1);
             await this.saveAdmins();
+            logger.success(`Admin dihapus: ${userId}`);
             return true;
         }
         return false;
@@ -89,8 +92,9 @@ class PermissionHandler {
     private async saveAdmins() {
         try {
             fs.writeFileSync(ADMINS_FILE, JSON.stringify({ admins: this.admins }, null, 2));
+            logger.info('Data admin berhasil disimpan');
         } catch (error) {
-            console.error('Gagal menyimpan data admin:', error);
+            logger.error('Gagal menyimpan data admin:', error);
             throw error;
         }
     }
@@ -98,20 +102,24 @@ class PermissionHandler {
     // Cek permission untuk command tertentu
     async checkPermission(userId: string, groupId: string | null, command: { isAdmin?: boolean, isOwner?: boolean, isGroupAdmin?: boolean }): Promise<boolean> {
         if (command.isOwner && !this.isOwner(userId)) {
+            logger.debug(`Permission ditolak: ${userId} bukan owner`);
             return false;
         }
 
         if (command.isAdmin && !this.isAdmin(userId) && !this.isOwner(userId)) {
+            logger.debug(`Permission ditolak: ${userId} bukan admin`);
             return false;
         }
 
         if (command.isGroupAdmin && groupId) {
             const isGroupAdm = await this.isGroupAdmin(groupId, userId);
             if (!isGroupAdm && !this.isOwner(userId)) {
+                logger.debug(`Permission ditolak: ${userId} bukan admin grup`);
                 return false;
             }
         }
 
+        logger.debug(`Permission diterima untuk user ${userId}`);
         return true;
     }
 }

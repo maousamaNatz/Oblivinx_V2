@@ -1,96 +1,118 @@
 import fs from 'fs';
 import path from 'path';
+import chalk from 'chalk';
 
 class Logger {
     private logPath: string;
-    private isEnabled: boolean;
-    private logLevel: 'debug' | 'info' | 'warn' | 'error';
+    private debugEnabled: boolean;
 
     constructor() {
-        this.logPath = process.env.LOG_PATH || 'src/db/logs';
-        // Memastikan logLevel sesuai dengan tipe yang diharapkan
-        const validLogLevels = ['debug', 'info', 'warn', 'error'] as const;
-        const defaultLogLevel = 'info' as const;
-        const configuredLogLevel = process.env.LOG_LEVEL as typeof validLogLevels[number];
-        
-        this.logLevel = validLogLevels.includes(configuredLogLevel) 
-            ? configuredLogLevel 
-            : defaultLogLevel;
-            
-        this.isEnabled = true;
-        this.initLogDirectory();
+        this.logPath = path.join(process.cwd(), 'src/db/logs');
+        this.debugEnabled = process.env.DEBUG === 'true';
+        this.ensureLogDirectory();
     }
 
-    private initLogDirectory() {
+    private ensureLogDirectory() {
         if (!fs.existsSync(this.logPath)) {
             fs.mkdirSync(this.logPath, { recursive: true });
         }
     }
 
-    // Fungsi untuk mengaktifkan logger
-    enable() {
-        this.isEnabled = true;
-    }
-
-    // Fungsi untuk menonaktifkan logger 
-    disable() {
-        this.isEnabled = false;
-    }
-
-    // Fungsi untuk mengecek status logger
-    isLoggerEnabled(): boolean {
-        return this.isEnabled;
-    }
-
-    private getLogFileName(): string {
+    private getLogFilePath() {
         const date = new Date();
-        return `${date.getFullYear()}-${(date.getMonth() + 1)}-${date.getDate()}.log`;
+        return path.join(this.logPath, `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}.log`);
     }
 
     private formatMessage(level: string, message: string): string {
-        return `[${new Date().toISOString()}] [${level}] ${message}\n`;
+        const timestamp = new Date().toISOString();
+        return `[${timestamp}] [${level.toUpperCase()}] ${message}\n`;
     }
 
-    private writeLog(logMessage: string) {
-        if (this.isEnabled) {
-            fs.appendFileSync(path.join(this.logPath, this.getLogFileName()), logMessage);
+    private formatConsoleMessage(level: string, message: string): string {
+        const timestamp = new Date().toLocaleTimeString();
+        switch (level.toLowerCase()) {
+            case 'info':
+                return `${chalk.blue('ℹ')} ${chalk.gray(timestamp)} ${chalk.blue(message)}`;
+            case 'success':
+                return `${chalk.green('✓')} ${chalk.gray(timestamp)} ${chalk.green(message)}`;
+            case 'warning':
+            case 'warn':
+                return `${chalk.yellow('⚠')} ${chalk.gray(timestamp)} ${chalk.yellow(message)}`;
+            case 'error':
+                return `${chalk.red('✖')} ${chalk.gray(timestamp)} ${chalk.red(message)}`;
+            case 'debug':
+                return `${chalk.magenta('🔍')} ${chalk.gray(timestamp)} ${chalk.magenta(message)}`;
+            default:
+                return `${chalk.gray(timestamp)} ${message}`;
         }
     }
 
-    private shouldLog(level: 'debug' | 'info' | 'warn' | 'error'): boolean {
-        const levels = ['debug', 'info', 'warn', 'error'];
-        return levels.indexOf(level) >= levels.indexOf(this.logLevel);
+    private writeToFile(message: string) {
+        try {
+            fs.appendFileSync(this.getLogFilePath(), message);
+        } catch (error) {
+            console.error('Failed to write to log file:', error);
+        }
     }
 
     info(message: string) {
-        if (this.shouldLog('info')) {
-            const logMessage = this.formatMessage('INFO', message);
-            this.writeLog(logMessage);
-        }
+        const consoleMessage = this.formatConsoleMessage('info', message);
+        const fileMessage = this.formatMessage('INFO', message);
+        console.log(consoleMessage);
+        this.writeToFile(fileMessage);
+    }
+
+    success(message: string) {
+        const consoleMessage = this.formatConsoleMessage('success', message);
+        const fileMessage = this.formatMessage('SUCCESS', message);
+        console.log(consoleMessage);
+        this.writeToFile(fileMessage);
+    }
+
+    warning(message: string) {
+        const consoleMessage = this.formatConsoleMessage('warning', message);
+        const fileMessage = this.formatMessage('WARNING', message);
+        console.log(consoleMessage);
+        this.writeToFile(fileMessage);
+    }
+
+    // Alias untuk warning
+    warn(message: string) {
+        this.warning(message);
     }
 
     error(message: string, error?: any) {
-        if (this.shouldLog('error')) {
-            let logMessage = this.formatMessage('ERROR', message);
-            if (error) {
-                logMessage += `Stack: ${error.stack}\n`;
-            }
-            this.writeLog(logMessage);
+        const errorMessage = error ? `${message}\n${error.stack || error}` : message;
+        const consoleMessage = this.formatConsoleMessage('error', errorMessage);
+        const fileMessage = this.formatMessage('ERROR', errorMessage);
+        console.error(consoleMessage);
+        this.writeToFile(fileMessage);
+    }
+
+    debug(message: string, data?: any) {
+        if (this.debugEnabled) {
+            const debugMessage = data ? `${message}\n${JSON.stringify(data, null, 2)}` : message;
+            const consoleMessage = this.formatConsoleMessage('debug', debugMessage);
+            const fileMessage = this.formatMessage('DEBUG', debugMessage);
+            console.log(consoleMessage);
+            this.writeToFile(fileMessage);
         }
     }
 
-    warn(message: string) {
-        if (this.shouldLog('warn')) {
-            const logMessage = this.formatMessage('WARN', message);
-            this.writeLog(logMessage);
-        }
+    command(name: string, source: string) {
+        const message = `Command ${name} berhasil dimuat dari ${source}`;
+        const consoleMessage = this.formatConsoleMessage('success', message);
+        const fileMessage = this.formatMessage('COMMAND', message);
+        console.log(consoleMessage);
+        this.writeToFile(fileMessage);
     }
 
-    debug(message: string) {
-        if (process.env.NODE_ENV === 'development' && this.shouldLog('debug')) {
-            const logMessage = this.formatMessage('DEBUG', message);
-            this.writeLog(logMessage);
-        }
+    connection(status: string, details?: string) {
+        const message = details ? `${status}: ${details}` : status;
+        const consoleMessage = this.formatConsoleMessage('info', message);
+        const fileMessage = this.formatMessage('CONNECTION', message);
+        console.log(consoleMessage);
+        this.writeToFile(fileMessage);
     }
 }
 

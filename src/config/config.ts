@@ -1,13 +1,9 @@
 import { WASocket, Browsers } from '@whiskeysockets/baileys';
-import pino from 'pino';
 import fs from 'fs';
-
+import pino from 'pino';
 // Konstanta
 const CONNECTION_TIMEOUT = 30000;
-
-// Logger instance
 const logger = pino({ level: 'silent' });
-
 // Baca file json
 const botinfo = JSON.parse(fs.readFileSync('src/db/jsonDb/db1/botinfo.json', 'utf8'));
 const changelog = fs.readFileSync('src/db/jsonDb/db1/changelog.txt', 'utf8');

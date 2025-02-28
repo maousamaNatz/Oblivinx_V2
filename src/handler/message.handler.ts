@@ -1,6 +1,7 @@
 import { WASocket, proto, AnyMessageContent } from '@whiskeysockets/baileys';
 import { commandRegistry } from '../helpers/commmand.register';
 import { permissionHandler } from './permission.handler';
+import { logger } from '../utilities/logger.utils';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -17,13 +18,14 @@ export const handleMessage = async (
     message: proto.IWebMessageInfo
 ) => {
     try {
-        console.log('[DEBUG] Menerima pesan baru');
-        console.log('[DEBUG] Message type:', message.message ? Object.keys(message.message)[0] : 'unknown');
-        console.log('[DEBUG] Full message object:', JSON.stringify(message, null, 2));
+        logger.debug('Menerima pesan baru', {
+            type: message.message ? Object.keys(message.message)[0] : 'unknown',
+            message: message
+        });
         
         // Validasi dasar pesan
         if (!message.message || message.key.fromMe) {
-            console.log('[DEBUG] Pesan diabaikan: dari diri sendiri atau tidak ada konten');
+            logger.debug('Pesan diabaikan: dari diri sendiri atau tidak ada konten');
             return;
         }
 
@@ -32,14 +34,18 @@ export const handleMessage = async (
         const sender = message.key.participant || remoteJid;
         const messageType = Object.keys(message.message)[0];
         
-        console.log(`[DEBUG] Metadata pesan - JID: ${remoteJid}, Sender: ${sender}, Type: ${messageType}`);
+        logger.debug('Metadata pesan', {
+            jid: remoteJid,
+            sender: sender,
+            type: messageType
+        });
         
         // Sistem blacklist pengguna
         try {
             if (fs.existsSync(BLACKLIST_FILE)) {
                 const blacklist = JSON.parse(fs.readFileSync(BLACKLIST_FILE, 'utf8'));
                 if (blacklist.users?.includes(sender)) {
-                    console.log(`[DEBUG] Pengguna ${sender} terblokir`);
+                    logger.warning(`Pengguna ${sender} terblokir`);
                     await sock.sendMessage(remoteJid, {
                         text: '⛔ Anda terblokir dari menggunakan bot ini'
                     });
@@ -47,7 +53,7 @@ export const handleMessage = async (
                 }
             }
         } catch (error) {
-            console.error('[ERROR] Error membaca blacklist:', error);
+            logger.error('Error membaca blacklist', error);
         }
 
         // Ekstrak konten pesan multi-format
@@ -70,13 +76,13 @@ export const handleMessage = async (
             ];
             
             const foundText = texts.find(text => typeof text === 'string' && text.trim().length > 0);
-            console.log('[DEBUG] Extracted text:', foundText);
+            logger.debug('Extracted text', { text: foundText });
             return foundText;
         };
 
         const textMessage = extractMessageText();
         if (!textMessage) {
-            console.log('[DEBUG] Tidak ada teks yang bisa diekstrak dari pesan');
+            logger.debug('Tidak ada teks yang bisa diekstrak dari pesan');
             return;
         }
 
@@ -89,31 +95,33 @@ export const handleMessage = async (
             }
             fs.appendFileSync(path.join(logDir, 'messages.txt'), logMessage);
         } catch (error) {
-            console.error('[ERROR] Gagal menulis log:', error);
+            logger.error('Gagal menulis log', error);
         }
 
         // Deteksi dan normalisasi perintah
         const isCommand = /^[!/](?:[\wá-žÁ-Ž]+)/.test(textMessage);
-        console.log(`[DEBUG] Is command: ${isCommand}, Text: ${textMessage}`);
+        logger.debug('Command detection', { isCommand, text: textMessage });
         
         if (isCommand) {
-            console.log(`[DEBUG] Mencoba menjalankan command: ${textMessage}`);
+            logger.info(`Menjalankan command: ${textMessage}`);
             try {
-                console.log('[DEBUG] Commands yang tersedia:', Array.from(commandRegistry.commands.keys()));
+                logger.debug('Commands yang tersedia', {
+                    commands: Array.from(commandRegistry.commands.keys())
+                });
                 await commandRegistry.handleCommand(sock, remoteJid, textMessage);
-                console.log('[DEBUG] Command berhasil dijalankan');
+                logger.success(`Command berhasil dijalankan: ${textMessage}`);
             } catch (error) {
-                console.error('[ERROR] Gagal memproses command:', error);
+                logger.error('Gagal memproses command', error);
                 await sock.sendMessage(remoteJid, {
                     text: '❌ Terjadi kesalahan saat memproses perintah'
                 });
             }
         } else {
-            console.log('[DEBUG] Memproses sebagai pesan biasa');
+            logger.debug('Memproses sebagai pesan biasa');
             await handleRegularMessage(sock, remoteJid, textMessage, message, sender);
         }
     } catch (error) {
-        console.error('[ERROR] Error dalam handleMessage:', error);
+        logger.error('Error dalam handleMessage', error);
     }
 };
 
@@ -131,14 +139,14 @@ const handleRegularMessage = async (
         // Auto-reply system
         if (fs.existsSync(AUTO_REPLY_FILE)) {
             const autoReplies = JSON.parse(fs.readFileSync(AUTO_REPLY_FILE, 'utf8'));
-            console.log('[DEBUG] Auto-replies loaded:', autoReplies);
+            logger.debug('Auto-replies loaded', autoReplies);
             
             const matchedReply = autoReplies.auto_replies?.find(({ trigger }: { trigger: string }) => 
                 new RegExp(`\\b${trigger}\\b`, 'i').test(messageText)
             );
 
             if (matchedReply) {
-                console.log('[DEBUG] Matched auto-reply:', matchedReply);
+                logger.debug('Matched auto-reply', matchedReply);
                 const messageContent: AnyMessageContent = {
                     text: matchedReply.response,
                     contextInfo: {
@@ -146,11 +154,11 @@ const handleRegularMessage = async (
                     }
                 };
                 await sock.sendMessage(remoteJid, messageContent);
-                console.log('[DEBUG] Auto-reply sent');
+                logger.success('Auto-reply terkirim');
             }
         }
     } catch (error) {
-        console.error('[ERROR] Error dalam handleRegularMessage:', error);
+        logger.error('Error dalam handleRegularMessage', error);
     }
 };
 
@@ -160,7 +168,7 @@ const handleRegularMessage = async (
 export const initMessageHandler = (sock: WASocket) => {
     // Event handler utama
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        console.log(`[DEBUG] Message upsert - Type: ${type}, Count: ${messages.length}`);
+        logger.debug('Message upsert', { type, count: messages.length });
         
         // Hanya proses pesan tipe 'notify'
         if (type !== 'notify') return;
@@ -168,24 +176,24 @@ export const initMessageHandler = (sock: WASocket) => {
         for (const message of messages) {
             try {
                 // Log pesan mentah untuk debugging
-                console.log('[DEBUG] Raw message:', JSON.stringify(message, null, 2));
+                logger.debug('Raw message', { message: JSON.stringify(message, null, 2) });
                 
                 // Pastikan pesan valid
                 if (!message.message) {
-                    console.log('[DEBUG] Pesan kosong, diabaikan');
+                    logger.debug('Pesan kosong, diabaikan');
                     continue;
                 }
 
                 await handleMessage(sock, message);
             } catch (error) {
-                console.error('[ERROR] Gagal memproses pesan:', error);
+                logger.error('Gagal memproses pesan', error);
                 if (message.key.remoteJid) {
                     try {
                         await sock.sendMessage(message.key.remoteJid, {
                             text: '⚠️ Terjadi kesalahan saat memproses pesan Anda'
                         });
                     } catch (sendError) {
-                        console.error('[ERROR] Gagal mengirim pesan error:', sendError);
+                        logger.error('Gagal mengirim pesan error', sendError);
                     }
                 }
             }
@@ -194,19 +202,17 @@ export const initMessageHandler = (sock: WASocket) => {
 
     // Event handler tambahan
     sock.ev.on('group-participants.update', async ({ id, participants, action }) => {
-        console.log(`[DEBUG] Group update - Action: ${action}, Group: ${id}`);
+        logger.debug('Group update', { action, group: id });
         if (action === 'add') {
             try {
                 await sock.sendMessage(id, {
                     text: `Selamat datang ${participants.map(p => `@${p.split('@')[0]}`).join(' ')}! 🎉`
                 });
             } catch (error) {
-                console.error('[ERROR] Gagal mengirim pesan welcome:', error);
+                logger.error('Gagal mengirim pesan welcome', error);
             }
         }
     });
 
-    console.log('[HANDLER] Sistem penanganan pesan canggih aktif\n' +
-                `🛡️ Sistem keamanan: Aktif\n` +
-                `⏱️ Waktu inisialisasi: ${new Date().toLocaleTimeString()}`);
+    logger.success('Sistem penanganan pesan aktif');
 };
